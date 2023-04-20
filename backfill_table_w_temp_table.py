@@ -46,10 +46,10 @@ while start_date < end_date:
     cur.execute(query)
 
     # Increment the start date by ? days / weeks / months
-    start_date += timedelta(days=1)
+    start_date += timedelta(days="?")
     
     # Print completion date for the current day
-    print(f"Query for {start_date - timedelta(days=?)} completed.")
+    print(f"Query for {start_date - timedelta(days="?")} completed.")
 
 # Close the cursor and connection
 cur.close()
