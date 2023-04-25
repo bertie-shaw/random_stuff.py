@@ -1,0 +1,78 @@
+import psycopg2
+import os
+from datetime import datetime, timedelta
+
+os.environ['REDSHIFT_USERNAME'] = 'bertie_shaw'
+os.environ['REDSHIFT_PASSWORD'] = 'MDg3YzgyNTAwYzkxYjM4NmUzMGUyZDVm'
+
+# set up connection parameters
+s = ("dbname=redshiftdb host=live-idl-prod-redshift-component-redshiftcluster-1q6vyltqf8lth.ctm1v7db0ubd.eu-west-1.redshift.amazonaws.com "
+     f"port=5439 user={os.environ['REDSHIFT_USERNAME']} password={os.environ['REDSHIFT_PASSWORD']}")
+
+# connect to Redshift
+conn = psycopg2.connect(s)
+cur = conn.cursor()
+
+# Set the start and end dates
+start_date = datetime.strptime('04/04/2022', '%d/%m/%Y')
+end_date = datetime.strptime('01/08/2022', '%d/%m/%Y')
+
+# Loop over each week between the start and end dates
+while start_date < end_date:
+    
+    # Set the start and end dates for the current week
+    week_start = start_date.strftime('%Y%m%d')
+    week_end = (start_date + timedelta(days=1)).strftime('%Y%m%d')
+    
+    # Execute the query for the current week
+    query = """
+        insert into central_insights_sandbox.responsive_pre_roll_skip_genre_bs (
+            with join_clip_id as (
+                select
+                    a.*,
+                    b.clip_id
+                from central_insights_sandbox.pre_roll_skip_time_s_bs a
+                left join central_insights.preroll_actions b
+                    on a.visit_id = b.visit_id
+                    and a.start_datetime = b.ts
+                where b.dt between '{}' and '{}'
+                    and date_trunc('day', a.start_datetime) between '{}' and '{}'
+            ),
+
+            join_genre as (
+                select
+                    a1.*,
+                    case
+                        when split_part(b1.pips_genre_level_1_names, ';', 1) is null then b1.pips_genre_level_1_names
+                        else split_part(b1.pips_genre_level_1_names, ';', 1)
+                    end as genre
+                from join_clip_id a1
+                left join s3_audience.audience_activity_content_summary b1
+                    on a1.clip_id = b1.clip_id
+                where b1.destination = 'PS_IPLAYER'
+                    and b1.dt between '{}' and '{}'
+            )
+
+            select distinct * from join_genre
+        )
+        ;
+        
+        commit
+        ;
+        
+    """.format(week_start, week_end, week_start, week_end, week_start, week_end)
+
+    cur.execute(query)
+
+    # Increment the start date by 7 days
+    start_date += timedelta(days=1)
+    
+    # Print completion date for the current day
+    print(f"Query for {start_date - timedelta(days=1)} completed.")
+
+# Close the cursor and connection
+cur.close()
+conn.close()
+
+# finish
+print("Script execution completed.")
